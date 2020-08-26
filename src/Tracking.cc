@@ -86,6 +86,11 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
         float K3 = fSettings["Camera.k3"];
         float K4 = fSettings["Camera.k4"];
 
+        std::cout << "K1 = " << K1 << std::endl;
+        std::cout << "K2 = " << K2 << std::endl;
+        std::cout << "K3 = " << K3 << std::endl;
+        std::cout << "K4 = " << K4 << std::endl;
+
         vector<float> vCamCalib{fx,fy,cx,cy,K1,K2,K3,K4};
 
         mpCamera = new KannalaBrandt8(vCamCalib);
@@ -268,7 +273,8 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     mbInitWith3KFs = false;
 
 
-    //Test Images
+    //Rectification parameters
+    /*mbNeedRectify = false;
     if((mSensor == System::STEREO || mSensor == System::IMU_STEREO) && sCameraName == "PinHole")
     {
         cv::Mat K_l, K_r, P_l, P_r, R_l, R_r, D_l, D_r;
@@ -289,17 +295,28 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
         int rows_r = fSettings["RIGHT.height"];
         int cols_r = fSettings["RIGHT.width"];
 
-        // M1r y M2r son los outputs (igual para l)
-        // M1r y M2r son las matrices relativas al mapeo correspondiente a la rectificación de mapa en el eje X e Y respectivamente
-        cv::initUndistortRectifyMap(K_l,D_l,R_l,P_l.rowRange(0,3).colRange(0,3),cv::Size(cols_l,rows_l),CV_32F,M1l,M2l);
-        cv::initUndistortRectifyMap(K_r,D_r,R_r,P_r.rowRange(0,3).colRange(0,3),cv::Size(cols_r,rows_r),CV_32F,M1r,M2r);
+        if(K_l.empty() || K_r.empty() || P_l.empty() || P_r.empty() || R_l.empty() || R_r.empty() || D_l.empty() || D_r.empty()
+                || rows_l==0 || cols_l==0 || rows_r==0 || cols_r==0)
+        {
+            mbNeedRectify = false;
+        }
+        else
+        {
+            mbNeedRectify = true;
+            // M1r y M2r son los outputs (igual para l)
+            // M1r y M2r son las matrices relativas al mapeo correspondiente a la rectificación de mapa en el eje X e Y respectivamente
+            //cv::initUndistortRectifyMap(K_l,D_l,R_l,P_l.rowRange(0,3).colRange(0,3),cv::Size(cols_l,rows_l),CV_32F,M1l,M2l);
+            //cv::initUndistortRectifyMap(K_r,D_r,R_r,P_r.rowRange(0,3).colRange(0,3),cv::Size(cols_r,rows_r),CV_32F,M1r,M2r);
+        }
+
+
     }
     else
     {
         int cols = 752;
         int rows = 480;
         cv::Mat R_l = cv::Mat::eye(3, 3, CV_32F);
-    }
+    }*/
 
     mnNumDataset = 0;
 
@@ -441,7 +458,7 @@ cv::Mat Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const d
         imDepth.convertTo(imDepth,CV_32F,mDepthMapFactor);
 
     std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
-    mCurrentFrame = Frame(mImGray,imDepth,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth);
+    mCurrentFrame = Frame(mImGray,imDepth,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,mpCamera);
 
     mCurrentFrame.mNameFile = filename;
     mCurrentFrame.mnDataset = mnNumDataset;
@@ -502,7 +519,6 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp,
     {
         if(mState==NOT_INITIALIZED || mState==NO_IMAGES_YET)
         {
-            cout << "init extractor" << endl;
             mCurrentFrame = Frame(mImGray,timestamp,mpIniORBextractor,mpORBVocabulary,mpCamera,mDistCoef,mbf,mThDepth,&mLastFrame,*mpImuCalib);
         }
         else
@@ -656,10 +672,6 @@ void Tracking::PreintegrateIMU()
     mCurrentFrame.mpImuPreintegrated = mpImuPreintegratedFromLastKF;
     mCurrentFrame.mpLastKeyFrame = mpLastKeyFrame;
 
-    if(!mpLastKeyFrame)
-    {
-        cout << "last KF is empty!" << endl;
-    }
     mCurrentFrame.setIntegrated();
 
     Verbose::PrintMess("Preintegration is finished!! ", Verbose::VERBOSITY_DEBUG);
@@ -930,8 +942,6 @@ void Tracking::Track()
         pCurrentMap->SetLastMapChange(nCurMapChangeIndex);
         mbMapUpdated = true;
     }
-
-    //std::cout << "T2" << std::endl;
 
 
     if(mState==NOT_INITIALIZED)
@@ -1362,7 +1372,6 @@ void Tracking::StereoInitialization()
 
             if (cv::norm(mCurrentFrame.mpImuPreintegratedFrame->avgA-mLastFrame.mpImuPreintegratedFrame->avgA)<0.5)
             {
-                cout << cv::norm(mCurrentFrame.mpImuPreintegratedFrame->avgA) << endl;
                 cout << "not enough acceleration" << endl;
                 return;
             }
@@ -1465,6 +1474,7 @@ void Tracking::MonocularInitialization()
         // Set Reference Frame
         if(mCurrentFrame.mvKeys.size()>100)
         {
+
             mInitialFrame = Frame(mCurrentFrame);
             mLastFrame = Frame(mCurrentFrame);
             mvbPrevMatched.resize(mCurrentFrame.mvKeysUn.size());
@@ -2927,7 +2937,7 @@ void Tracking::ResetActiveMap(bool bLocMap)
 
         index++;
     }
-    cout << num_lost << " Frames had been set to lost" << endl;
+    cout << num_lost << " Frames set to lost" << endl;
 
     mlbLost = lbLost;
 

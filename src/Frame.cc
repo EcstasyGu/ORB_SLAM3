@@ -118,7 +118,6 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
 
 
     N = mvKeys.size();
-
     if(mvKeys.empty())
         return;
 
@@ -189,11 +188,11 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
     monoRight = -1;
 }
 
-Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth, Frame* pPrevF, const IMU::Calib &ImuCalib)
+Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth, GeometricCamera* pCamera,Frame* pPrevF, const IMU::Calib &ImuCalib)
     :mpcpi(NULL),mpORBvocabulary(voc),mpORBextractorLeft(extractor),mpORBextractorRight(static_cast<ORBextractor*>(NULL)),
      mTimeStamp(timeStamp), mK(K.clone()),mDistCoef(distCoef.clone()), mbf(bf), mThDepth(thDepth),
      mImuCalib(ImuCalib), mpImuPreintegrated(NULL), mpPrevFrame(pPrevF), mpImuPreintegratedFrame(NULL), mpReferenceKF(static_cast<KeyFrame*>(NULL)), mbImuPreintegrated(false),
-     mpCamera2(nullptr), mTimeStereoMatch(0), mTimeORB_Ext(0)
+     mpCamera(pCamera),mpCamera2(nullptr), mTimeStereoMatch(0), mTimeORB_Ext(0)
 {
     // Frame ID
     mnId=nNextId++;
@@ -255,8 +254,6 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeSt
 
     mb = mbf/fx;
 
-    AssignFeaturesToGrid();
-
     mpMutexImu = new std::mutex();
 
     //Set no stereo fisheye information
@@ -269,6 +266,8 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeSt
     mvStereo3Dpoints = vector<cv::Mat>(0);
     monoLeft = -1;
     monoRight = -1;
+
+    AssignFeaturesToGrid();
 }
 
 
@@ -280,11 +279,6 @@ Frame::Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extra
 {
     // Frame ID
     mnId=nNextId++;
-
-    // imGray(cv::Range(0,175),cv::Range(0,512)) = cv::Mat::zeros(cv::Size(512, 175),CV_8UC1);
-    // imGray(cv::Range(350,512),cv::Range(260,360)) = cv::Mat::zeros(cv::Size(100, 162),CV_8UC1);
-
-    // imGray = imGray(cv::Range(250,512),cv::Range(0,512)).clone();
 
     // Scale Level Info
     mnScaleLevels = mpORBextractorLeft->GetLevels();
@@ -308,7 +302,6 @@ Frame::Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extra
 
 
     N = mvKeys.size();
-
     if(mvKeys.empty())
         return;
 
@@ -343,6 +336,7 @@ Frame::Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extra
 
         mbInitialComputations=false;
     }
+
 
     mb = mbf/fx;
 
